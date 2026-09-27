@@ -13,7 +13,7 @@ project into a repository.
 ## Build and install
 
 Build the sibling [Kotlin LunaCore](https://github.com/linlunaire/Kotlin-LunaCore)
-0.2.0 and MTR 26.2 Kotlin targets first, then from the JCM root:
+0.2.1 and MTR 26.2 Kotlin targets first, then from the JCM root:
 
 ```powershell
 ./gradlew.bat build -Version=26.2 -JavaHome '<JDK 25 directory>'
@@ -28,12 +28,12 @@ under ignored `build/` directories; never edit those in place.
 
 Successful builds put these files in the root `build/release/`:
 
-- `JCM-fabric-1.2.2-26.2-kotlin.1.jar`
-- `JCM-neoforge-1.2.2-26.2-kotlin.1.jar`
+- `JCM-fabric-1.2.2-26.2-kotlin.2.jar`
+- `JCM-neoforge-1.2.2-26.2-kotlin.2.jar`
 
 Install only the matching loader JAR, with the freshly rebuilt MTR 26.2 and
-Architectury >=21.1.10 and <22, plus Kotlin LunaCore 0.2.0; Fabric also needs Fabric API.
-MTR must be at least `26.2-3.4.0-kotlin.1` for its fare-adjustment API.
+Architectury >=21.1.10 and <22, plus Kotlin LunaCore 0.2.1; Fabric also needs Fabric API.
+This preview requires MTR `26.2-3.4.0-kotlin.2` or newer, including its fare-adjustment API.
 Kotlin LunaCore supplies the shared Kotlin runtime. JCM does not bundle Kotlin or
 require Fabric Language Kotlin / Kotlin for Forge. The compile targets
 are Fabric Loader 0.19.3 / Fabric API 0.159.0+26.2 and NeoForge 26.2.0.88. Do not
