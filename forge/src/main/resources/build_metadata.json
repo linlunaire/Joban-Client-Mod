@@ -1,5 +1,0 @@
-{
-  "version": "${version}",
-  "fullVersion": "${full_version}",
-  "minecraftVersion": "${mc_version}"
-}

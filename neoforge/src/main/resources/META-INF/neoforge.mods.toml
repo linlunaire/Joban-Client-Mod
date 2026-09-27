@@ -1,0 +1,42 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "Apache-2.0"
+
+[[mods]]
+modId = "jsblock"
+version = "${version}"
+displayName = "Joban Client Mod"
+authors = "LX86, StrikeSNC, AozoraSky"
+description = "Add static signal lights, PIDS and Hong Kong-specific decoration blocks to MTR."
+logoFile = "icon.png"
+
+[[mixins]]
+config = "jsblock.mixins.json"
+
+[[dependencies.jsblock]]
+modId = "neoforge"
+mandatory = true
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.jsblock]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[${minecraft_version}]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.jsblock]]
+modId = "architectury"
+mandatory = true
+versionRange = "[13,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.jsblock]]
+modId = "mtr"
+mandatory = true
+versionRange = "[${mtr_min_version},)"
+ordering = "AFTER"
+side = "BOTH"

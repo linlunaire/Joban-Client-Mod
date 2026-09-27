@@ -1,55 +1,37 @@
 {
-	"schemaVersion": 1,
-	"id": "jsblock",
-	"version": "${version}",
-	"name": "Joban Client Mod",
-	"description": "Railway facilities & technical addon for Minecraft Transit Railway 4.0.",
-	"authors": [
-		"AmberFrost"
-	],
-	"contributors": [
-		"1081MTR",
-		"AozoraSky",
-		"StrikeSNC",
-		"Dooji",
-		"Jonathan Ho",
-		"CinderaceOTS"
-	],
-	"contact": {
-		"homepage": "https://jcm.joban.org",
-		"sources": "https://github.com/DistrictOfJoban/Joban-Client-Mod",
-		"issues": "https://github.com/DistrictOfJoban/Joban-Client-Mod/issues"
-	},
-	"license": "MIT",
-	"icon": "assets/jsblock/icon.png",
-	"environment": "*",
-	"entrypoints": {
-		"main": [
-          "com.lx862.jcm.entrypoint.Main"
-		],
-		"client": [
-          "com.lx862.jcm.entrypoint.MainClient"
-		],
-		"modmenu": [
-			"com.lx862.jcm.entrypoint.ModMenuConfig"
-		]
-	},
-	"mixins": [
-		"mtrscripting.mixins.json",
-		"jsblock.mixins.json"
-	],
-	"depends": {
-		"fabricloader": ">=0.16.0",
-		"minecraft": "~${minecraft_version}",
-		"mtr": ">=4.0.5 <4.1",
-		"fabric": "*"
-	},
-	"custom": {
-		"modmenu": {
-			"links": {
-				"modmenu.discord": "https://joban.org/dc"
-			},
-			"update_checker": true
-		}
-	}
+  "schemaVersion": 1,
+  "id": "jsblock",
+  "version": "${version}",
+  "name": "Joban Client Mod",
+  "description": "Add static signal lights, PIDS and Hong Kong-specific decoration blocks to MTR.",
+  "authors": [
+    "LX86",
+    "StrikeSNC",
+    "AozoraSky"
+  ],
+  "contact": {
+    "homepage": "https://discord.gg/FNc2rgWmP2"
+  },
+  "license": "Apache-2.0",
+  "icon": "icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.jsblock.fabric.JobanFabric"
+    ],
+    "client": [
+      "com.jsblock.fabric.JobanFabricClient"
+    ]
+  },
+  "mixins": [
+    "jsblock.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "architectury": ">=13.0.0",
+    "mtr": ">=${mtr_min_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=21"
+  }
 }

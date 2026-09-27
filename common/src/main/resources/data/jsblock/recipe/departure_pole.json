@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {
+      "item": "jsblock:departure_timer"
+    }
+  ],
+  "result": {
+    "count": 16,
+    "id": "jsblock:departure_pole"
+  }
+}

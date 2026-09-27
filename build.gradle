@@ -1,174 +1,45 @@
 plugins {
-//	id "io.github.pacifistmc.forgix" version "1.2.9"
-	id 'com.gradleup.shadow' version '8.3.4' apply false
+	id "architectury-plugin" version "3.4.164"
+	id "dev.architectury.loom" version "1.11.458" apply false
+	id "com.gradleup.shadow" version "8.3.0" apply false
 }
 
-//forgix {
-//	group = "com.lx862.jcm"
-//	mergedJarName = "${project.archives_base_name}-${project.mod_version}+${project.minecraft_version}.jar"
-//	outputDir = "build/"
+def minecraftVersion = providers.gradleProperty("minecraft_version").get()
+def mtrProject = file(findProperty("mtrProjectDir") ?: "../Minecraft-Transit-Railway-1.21.1")
+def mtrPropertiesFile = mtrProject.toPath().resolve("gradle.properties").toFile()
+def mtrProperties = new Properties()
+if (!mtrPropertiesFile.isFile()) {
+	throw new GradleException("MTR source not found at ${mtrProject}. Set -PmtrProjectDir to the Minecraft 1.21.1 checkout.")
+}
+mtrPropertiesFile.withInputStream { mtrProperties.load(it) }
+if (mtrProperties.getProperty("minecraft_version", "1.21.1") != minecraftVersion) {
+	throw new GradleException("JCM ${minecraftVersion} cannot use MTR for ${mtrProperties.getProperty('minecraft_version')}.")
+}
+def mtrVersion = "${minecraftVersion}-${mtrProperties.getProperty("mod_version")}"
 
-//	fabric {
-//		projectName = "fabric"
-//		jarLocation = "build/libs/${project.archives_base_name}-fabric-${project.mod_version}+${project.minecraft_version}.jar"
-//	}
-//
-//	forge {
-//		projectName = "forge"
-//		jarLocation = "build/libs/${project.archives_base_name}-forge-${project.mod_version}+${project.minecraft_version}.jar"
-//	}
-//}
+ext.minecraftVersion = minecraftVersion
+ext.mtrProject = mtrProject
+ext.mtrVersion = mtrVersion
+ext.mtrCommonDevJar = mtrProject.toPath().resolve("common/build/devlibs/common-${mtrVersion}-dev.jar").toFile()
+ext.mtrFabricDevJar = mtrProject.toPath().resolve("fabric/build/devlibs/fabric-${mtrVersion}-dev.jar").toFile()
+ext.mtrNeoForgeDevJar = mtrProject.toPath().resolve("forge/build/devlibs/neoforge-${mtrVersion}-dev.jar").toFile()
+ext.mtrFabricReleaseJar = mtrProject.toPath().resolve("build/release/MTR-fabric-${mtrVersion}.jar").toFile()
+ext.mtrNeoForgeReleaseJar = mtrProject.toPath().resolve("build/release/MTR-neoforge-${mtrVersion}.jar").toFile()
 
-configure(subprojects.findAll {it.name != 'rhino'}) {
-	apply plugin: "java"
-	apply plugin: 'com.gradleup.shadow'
-
-	group project.maven_group
-	version "${rootProject.properties.mod_version}+${rootProject.properties.minecraft_version}"
-
-	configurations {
-		shadowImplementation
-		implementation.extendsFrom shadowImplementation
-	}
-
-	base {
-		archivesName = "${rootProject.archives_base_name}-${project.properties.loader_name}"
-	}
-
-	dependencies {
-		implementation 'com.google.code.findbugs:jsr305:+'
-		shadowImplementation project(":rhino")
-		implementation "folk.sisby:kaleido-config:${rootProject.properties.kaleido_version}"
-	}
-
-	repositories {
-		maven { url "https://jitpack.io" }
-		maven { url 'https://repo.sleeping.town/' }
-	}
-
-	shadowJar {
-		configurations = [project.configurations.shadowImplementation]
-	}
-
-	def mc_ver = rootProject.properties.minecraft_version
-	def mc_major = mc_ver.split("\\.")[0]
-	def mc_main = mc_ver.split("\\.")[1]
-	def mc_minor = mc_ver.split("\\.").size() > 2 ? (mc_ver.split("\\.")[2] as String).padLeft(2, '0') : 0
-	def merged_mc_version = "$mc_major$mc_main$mc_minor"
-
-	ext { // Expose to subproject
-		merged_mc_version_int = merged_mc_version as int
-		java_version =
-			(merged_mc_version as int) <= 11701 ? 16 :
-			(merged_mc_version as int) <= 12004 ? 17 :
-			21
-
-		lg_unicode = (mc_main as int) <= 19 ? rootProject.properties.legacy_unicode_font : rootProject.properties.modern_fallback_font
-		door_blockstate = (mc_main as int) <= 18 ? rootProject.properties.mc_door_118 : rootProject.properties.mc_door_119
-		full_mod_version = version + artifact_date
-	}
-
-	/* Manifold support */
-	tasks.withType(JavaCompile).forEach {
-		it.options.compilerArgs += [ // Dependencies declared in subproject
-			"-Xplugin:Manifold",
-			"-AMC_VERSION=$merged_mc_version",
-			"-ALOADER=$project.properties.loader_name"
-		]
-	}
-
-	// Some system don't compile with UTF-8 by default
-	compileJava {
-		options.encoding = 'UTF-8'
-	}
-
-	// Replace placeholder resources
-	processResources {
-		inputs.property "version", version + artifact_date
-		inputs.property "minecraft_version", rootProject.minecraft_version
-		inputs.property "legacy_unicode", project.lg_unicode
-		inputs.property "mc_door_blockstate", project.door_blockstate
-		inputs.property "condition", merged_mc_version >= 12000 ? "any_of" : "alternative"
-
-		filesMatching('META-INF/mods.toml') {
-			expand (
-				"minecraft_version": minecraft_version,
-				"mod_version": project.full_mod_version
-			)
-		}
-
-		filesMatching("fabric.mod.json") {
-			expand (
-				"version": project.full_mod_version,
-				"minecraft_version": rootProject.minecraft_version
-			)
-		}
-
-		filesMatching("build_metadata.json") {
-			expand(
-				"version": rootProject.properties.mod_version,
-				"full_version": project.full_mod_version,
-				"mc_version": rootProject.properties.minecraft_version,
-			)
-		}
-
-		filesMatching("**/font/*.json") {
-			expand (
-				"legacy_unicode": project.lg_unicode,
-			)
-		}
-
-		filesMatching("**/blockstates/auto_iron_door.json") {
-			expand (
-				"mc_door_blockstate": project.door_blockstate,
-			)
-		}
-
-		filesMatching("**/loot_tables/blocks/*.json") {
-			expand(
-				"condition": merged_mc_version >= 12000 ? "any_of" : "alternative"
-			)
-		}
-	}
-
-//	build.finalizedBy(mergeJars)
-//	assemble.finalizedBy(mergeJars)
+architectury {
+	minecraft = minecraftVersion
 }
 
-tasks.register("setupFiles") {
-	var sourceModloader = "fabric"
-
-	doLast {
-		for(var targetModloader : ["forge"]) {
-			delete fileTree("${targetModloader}/src/main/java/com/lx862/jcm/mod")
-			delete fileTree("${targetModloader}/src/main/java/com/lx862/mtrscripting")
-			delete fileTree("${targetModloader}/src/main/resources/assets")
-			delete fileTree("${targetModloader}/src/main/resources/data")
-
-			copy {
-				from "${sourceModloader}/src/main/java/com/lx862/jcm/mod"
-				into "${targetModloader}/src/main/java/com/lx862/jcm/mod"
-			}
-
-			copy {
-				from "${sourceModloader}/src/main/java/com/lx862/mtrscripting"
-				into "${targetModloader}/src/main/java/com/lx862/mtrscripting"
-			}
-
-			copy {
-				from "${sourceModloader}/src/main/java/com/lx862/amberui/gui"
-				into "${targetModloader}/src/main/java/com/lx862/amberui/gui"
-			}
-
-			copy {
-				from "${sourceModloader}/src/main/resources/assets"
-				into "${targetModloader}/src/main/resources/assets"
-			}
-
-			copy {
-				from "${sourceModloader}/src/main/resources/data"
-				into "${targetModloader}/src/main/resources/data"
-			}
-		}
+// Loom must be present before Architectury creates the Fabric/NeoForge
+// platform configurations. This matches the working MTR and MTR-ANTE setup.
+subprojects {
+	if (project.name == "neoforge") {
+		extensions.extraProperties.set("loom.platform", "neoforge")
 	}
+	apply plugin: "dev.architectury.loom"
+	apply plugin: "com.gradleup.shadow"
+}
+
+allprojects {
+	apply plugin: "architectury-plugin"
 }

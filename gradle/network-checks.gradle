@@ -1,0 +1,17 @@
+def networkClasses = layout.buildDirectory.dir('classes/networkCompatibility')
+def networkGroovy = configurations.detachedConfiguration(dependencies.localGroovy())
+def compileNetwork = tasks.register('compileNetworkCompatibility', JavaCompile) {
+	source rootProject.fileTree('tests/network') { include '*.java' }
+	classpath = configurations.compileClasspath + networkGroovy
+	destinationDirectory = networkClasses
+	options.compilerArgs = ['-proc:none']
+}
+tasks.register('checkNetworkCompatibility', JavaExec) {
+	group = 'verification'
+	description = 'Checks JCM dedicated-server registration and real Architectury wire round trips.'
+	dependsOn compileNetwork
+	classpath = files(networkClasses) + configurations.compileClasspath + networkGroovy
+	mainClass = 'mtr.mappings.NetworkCompatibilityCheck'
+	args rootProject.projectDir.absolutePath
+}
+tasks.named('check') { dependsOn 'checkNetworkCompatibility' }

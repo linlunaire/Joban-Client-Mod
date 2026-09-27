@@ -1,0 +1,35 @@
+group = rootProject.maven_group
+version = "${rootProject.mod_version}+${rootProject.minecraftVersion}"
+
+repositories {
+	mavenCentral()
+	maven { url = "https://maven.fabricmc.net/" }
+	maven { url = "https://maven.architectury.dev/" }
+	maven { url = "https://maven.neoforged.net/releases" }
+}
+
+loom {
+	silentMojangMappingsLicense()
+	mixin {
+		useLegacyMixinAp = true
+		defaultRefmapName.set("jsblock.refmap.json")
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${rootProject.minecraftVersion}"
+	mappings loom.layered {
+		officialMojangMappings()
+		parchment("org.parchmentmc.data:parchment-1.21.1:2024.11.17@zip")
+	}
+}
+
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(21)
+	withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
+	options.release = 21
+}

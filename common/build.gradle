@@ -1,0 +1,16 @@
+plugins {
+	id "java"
+}
+
+apply from: rootProject.file("gradle/platform.gradle")
+apply from: rootProject.file("gradle/network-checks.gradle")
+
+architectury {
+	common("fabric", "neoforge")
+}
+
+dependencies {
+	modImplementation "net.fabricmc:fabric-loader:0.19.3"
+	modApi "dev.architectury:architectury:13.0.11"
+	modCompileOnly files(rootProject.mtrCommonDevJar)
+}
