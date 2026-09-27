@@ -1,0 +1,91 @@
+// Keep the original registration names: several legacy ids intentionally differ
+// from their Java field names (pids_4, exit_sign_1, helpline_5, op_button, ...).
+def jcmRegistrationIds = [Blocks: [:], Items: [:]]
+def jcmInitializer = new File(rootProject.sharedRoot, 'common/src/main/java/com/jsblock/Joban.java').getText('UTF-8')
+(jcmInitializer =~ /register\w+\.accept\("([^"]+)", (Blocks|Items)\.([A-Z0-9_]+)/).each { match ->
+    def previous = jcmRegistrationIds[match[2]].put(match[3], match[1])
+    if (previous != null && previous != match[1]) {
+        throw new GradleException("Conflicting JCM registry identifier for ${match[2]}.${match[3]}")
+    }
+}
+
+rootProject.ext.transformJcm26BlockSource = { String source, String path ->
+    def result = source
+    jcmRegistrationIds.each { owner, names ->
+        if (source.contains("public interface ${owner} {")) {
+            result = result.replaceAll(/(RegistryObject<\w+> ([A-Z0-9_]+) = )new RegistryObject\(/) { match, prefix, field ->
+                def id = names[field]
+                if (id == null) throw new GradleException("Missing JCM registry identifier for ${owner}.${field}")
+                return "${prefix}new com.jsblock.vermappings.block.JobanRegistryObject<>(\"${id}\", "
+            }
+            // All seven legacy predicates are constant true; 26.2 receives only
+            // the block state, without changing which blocks are emissive.
+            result = result.replace('.emissiveRendering((state, world, pos) -> {', '.emissiveRendering((state) -> {')
+        }
+    }
+
+    if (source.startsWith('package com.jsblock.block;')) {
+        result = result
+            .replace('updateShape(BlockState state, Direction direction, BlockState newState, LevelAccessor world, BlockPos pos, BlockPos posFrom)',
+                'updateShape(BlockState state, net.minecraft.world.level.LevelReader world, net.minecraft.world.level.ScheduledTickAccess scheduledTicks, BlockPos pos, Direction direction, BlockPos posFrom, BlockState newState, net.minecraft.util.RandomSource random)')
+            .replace('getFenceState(BlockState stateNear, Direction direction, BlockState state, LevelAccessor world, BlockPos pos)',
+                'getFenceState(BlockState stateNear, Direction direction, BlockState state, net.minecraft.world.level.LevelReader world, BlockPos pos)')
+            .replace('propagatesSkylightDown(BlockState state, BlockGetter world, BlockPos pos)', 'propagatesSkylightDown(BlockState state)')
+
+        // INVISIBLE skips the baked block model only. JobanClient still registers
+        // RenderJobanPSDAPG for the door block entity, preserving animated doors.
+        if (source.contains('class APGDoorDRL ')) {
+            result = result.replace('RenderShape.ENTITYBLOCK_ANIMATED', 'RenderShape.INVISIBLE')
+        }
+
+        // The old callback is not invoked by vanilla any more. Bridge both modern
+        // interactions to it, retaining the actual hand for bottle/item machines.
+        result = result.replaceAll(/(   public InteractionResult use\(BlockState state, Level world, BlockPos pos, Player player, InteractionHand (\w+), BlockHitResult (\w+)\) \{)/) { match, method, hand, hit ->
+            return '''   @Override
+   public InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+      return use(state, world, pos, player, InteractionHand.MAIN_HAND, hit);
+   }
+
+   @Override
+   public InteractionResult useItemOn(net.minecraft.world.item.ItemStack stack, BlockState state, Level world, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+      return use(state, world, pos, player, hand, hit);
+   }
+
+''' + method
+        }
+
+        // These three classes inherit directly from vanilla instead of MTR's
+        // property-aware base, so establish the same registration context here.
+        if (source.contains('class Light2 extends Block ') || source.contains('class SoundLooper extends Block ')) {
+            result = result.replace('super(settings);', 'super(mtr.mappings.RegistrationContext.blockProperties(settings));')
+        }
+        if (source.contains('class MTRStairs1 extends StairBlock ')) {
+            result = result.replace('super(Blocks.SMOOTH_STONE.defaultBlockState(), settings);', 'super(Blocks.SMOOTH_STONE.defaultBlockState(), mtr.mappings.RegistrationContext.blockProperties(settings));')
+        }
+
+        if (source.contains('class BlockPIDSBaseHorizontal ')) {
+            result = result.replace('implements EntityBlockMapper, IPIDS {', 'implements EntityBlockMapper, IPIDS, mtr.mappings.BlockTooltip {')
+                .replace('appendHoverText(ItemStack stack, BlockGetter blockGetter, List<Component> tooltip, TooltipFlag tooltipFlag)',
+                    'appendHoverText(ItemStack stack, net.minecraft.world.item.Item.TooltipContext blockGetter, List<Component> tooltip, TooltipFlag tooltipFlag)')
+                .replace('this.createBlockEntity(new BlockPos(0, 0, 0), (BlockState)null)', 'this.createBlockEntity(BlockPos.ZERO, defaultBlockState())')
+        }
+
+        // The MTR ValueInput/ValueOutput bridge calls these legacy read/write
+        // methods with the original root NBT keys; only primitive getters changed.
+        def compoundNames = (source =~ /\bCompoundTag\s+(\w+)/).collect { it[1] }.unique()
+        compoundNames.each { name ->
+            result = result.replaceAll(/\b${name}\.(getInt|getLong|getFloat|getDouble|getBoolean|getString|getByteArray|getLongArray|getUUID)\(/) { match, method ->
+                return "mtr.mappings.CompoundTagMapper.${method}(${name}, "
+            }
+        }
+    }
+    if (source.contains('class DoorBase extends DoorBlock ')) {
+        result = result.replace('super(BlockSetType.IRON, properties);', 'super(BlockSetType.IRON, mtr.mappings.RegistrationContext.blockProperties(properties));')
+    }
+    if (source.startsWith('package com.jsblock.item;')) {
+        result = result.replace('appendHoverText(ItemStack itemStack, Level level, List<Component> tooltip, TooltipFlag tooltipFlag)',
+                'appendHoverText(ItemStack itemStack, Item.TooltipContext level, net.minecraft.world.item.component.TooltipDisplay display, java.util.function.Consumer<Component> tooltip, TooltipFlag tooltipFlag)')
+            .replace('tooltip.add(', 'tooltip.accept(')
+    }
+    return result
+}

@@ -1,0 +1,14 @@
+// Equivalent API renames are applied only to disposable generated sources.
+// Changes to behavior belong in the focused port scripts or version overlays.
+rootProject.ext.transformJcm26CoreSource = { String source, String path ->
+    source.replace('\r\n', '\n')
+        .replaceAll(/\bResourceLocation\b/, 'Identifier')
+        .replaceAll(/\breadResourceLocation\b/, 'readIdentifier')
+        .replaceAll(/\bwriteResourceLocation\b/, 'writeIdentifier')
+        .replaceAll(/\bGuiGraphics\b/, 'GuiGraphicsExtractor')
+        .replace('net.minecraft.client.renderer.RenderType', 'net.minecraft.client.renderer.rendertype.RenderType')
+        .replace('net.minecraft.Util', 'net.minecraft.util.Util')
+        .replace('net.minecraft.util.Tuple', 'mtr.mappings.Tuple')
+        .replace('player.displayClientMessage(', 'mtr.mappings.PlayerUtilities.displayClientMessage(player, ')
+        .replaceAll(/\.isClientSide\b(?!\s*\()/, '.isClientSide()')
+}

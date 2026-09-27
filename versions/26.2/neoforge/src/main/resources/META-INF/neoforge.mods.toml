@@ -1,0 +1,40 @@
+license = "Apache-2.0"
+[[mods]]
+modId = "jsblock"
+version = "${version}"
+displayName = "Joban Client Mod"
+authors = "LX86, StrikeSNC, AozoraSky"
+description = "Kotlin migration preview of JCM for Minecraft 26.2 with Kotlin LunaCore; gameplay validation is incomplete."
+logoFile = "icon.png"
+[[mixins]]
+config = "jsblock.mixins.json"
+[[dependencies.jsblock]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.2.0.88,26.3)"
+ordering = "NONE"
+side = "BOTH"
+[[dependencies.jsblock]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.2]"
+ordering = "NONE"
+side = "BOTH"
+[[dependencies.jsblock]]
+modId = "architectury"
+type = "required"
+versionRange = "[21.1.10,22)"
+ordering = "AFTER"
+side = "BOTH"
+[[dependencies.jsblock]]
+modId = "mtr"
+type = "required"
+versionRange = "[${minimumMtrVersion},26.3)"
+ordering = "AFTER"
+side = "BOTH"
+[[dependencies.jsblock]]
+modId = "transit_core"
+type = "required"
+versionRange = "[${transitCoreVersion},0.3)"
+ordering = "AFTER"
+side = "BOTH"

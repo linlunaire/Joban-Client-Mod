@@ -1,0 +1,94 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+def converter = new GroovyClassLoader(getClass().classLoader).parseClass(rootProject.file('JcmResourcePort.groovy'))
+rootProject.ext.jcm26ResourceConverter = converter
+def initializer = new File(rootProject.sharedRoot, 'common/src/main/java/com/jsblock/Joban.java')
+project(':common') {
+    File sourceResources = new File(rootProject.sharedRoot, 'common/src/main/resources')
+    def generatedResources = layout.buildDirectory.dir('generated/resources/jcm26')
+    def prepareResources = tasks.register('prepareJcm26Resources', Sync) {
+        inputs.file(rootProject.file('JcmResourcePort.groovy'))
+        inputs.file(initializer)
+        inputs.files(fileTree(new File(sourceResources, 'assets/jsblock/models/item')))
+        from(sourceResources) { include 'data/**'; include converter.MODEL_PARTICLES.keySet() }
+        into generatedResources
+        doLast {
+            File output = destinationDir
+            Set<String> ids = converter.registeredItems(initializer.getText('UTF-8'))
+            // Sync removes only this task's generated build tree before producing a fresh migration.
+            fileTree(output).matching { include 'data/**/*.json'; include converter.MODEL_PARTICLES.keySet() }.files.toList().each { source ->
+                String relative = output.toPath().relativize(source.toPath()).toString().replace('\\', '/')
+                String target = converter.targetPath(relative)
+                Map before = new JsonSlurper().parse(source) as Map
+                Map after = converter.convert(relative, before)
+                File destination = new File(output, target)
+                if (destination != source && destination.isFile()) throw new GradleException("Conflicting generated resource: ${target}")
+                if (before != after || target != relative) {
+                    destination.parentFile.mkdirs()
+                    destination.setText(JsonOutput.prettyPrint(JsonOutput.toJson(after)) + '\n', 'UTF-8')
+                    if (target != relative && !source.delete()) throw new GradleException("Could not remove old generated resource: ${source}")
+                }
+            }
+            ids.each { id ->
+                if (!new File(sourceResources, "assets/jsblock/models/item/${id}.json").isFile()) throw new GradleException("Registered item has no model: jsblock:${id}")
+                File definition = new File(output, "assets/jsblock/items/${id}.json")
+                definition.parentFile.mkdirs()
+                definition.setText(JsonOutput.prettyPrint(JsonOutput.toJson(converter.itemDefinition('jsblock', id))) + '\n', 'UTF-8')
+            }
+            logger.lifecycle("JCM 26.2 resources: ${ids.size()} registered client-item definitions; recipes and loot converted in build output")
+        }
+    }
+    def resources = tasks.named('processResources') {
+        dependsOn prepareResources
+        from generatedResources
+        eachFile { details ->
+            if (converter.MODEL_PARTICLES.containsKey(details.path)
+                    && !details.file.toPath().startsWith(generatedResources.get().asFile.toPath())) {
+                details.exclude()
+            }
+        }
+    }
+    def checkResources = tasks.register('checkJcm26Resources') {
+        dependsOn resources
+        doLast {
+            File output = resources.get().destinationDir
+            Set<String> ids = converter.registeredItems(initializer.getText('UTF-8'))
+            Set<String> actual = fileTree(new File(output, 'assets/jsblock/items')).matching { include '**/*.json' }.files.collect { it.name - '.json' } as Set
+            if (actual != ids) throw new GradleException('Generated client-item ids do not exactly match Joban.init')
+            converter.MODEL_PARTICLES.each { path, texture ->
+                Map model = new JsonSlurper().parse(new File(output, path)) as Map
+                if (model.textures.particle != texture) throw new GradleException("Missing generated particle texture: ${path}")
+            }
+            fileTree(output).matching { include 'data/**/recipe/**/*.json' }.each { resource ->
+                Map json = new JsonSlurper().parse(resource) as Map
+                String path = output.toPath().relativize(resource.toPath()).toString().replace('\\', '/')
+                if (converter.convert(path, json) != json) throw new GradleException("Resource migration is not idempotent: ${path}")
+            }
+            logger.lifecycle("PASS: ${ids.size()} JCM registry ids match generated item definitions; converted recipe shapes are idempotent (not a game reload test)")
+        }
+    }
+    def checkLoaderSource = tasks.register('checkJcm26LoaderSource', JavaExec) {
+        inputs.files(rootProject.file('source-port.gradle'), rootProject.file('loader-port.gradle'),
+                rootProject.file('JcmResourcePort.groovy'), rootProject.file('tests/LoaderResourceCompatibilityCheck.groovy'))
+        classpath = files(groovy.lang.GroovyObject.protectionDomain.codeSource.location,
+                groovy.json.JsonSlurper.protectionDomain.codeSource.location)
+        mainClass = 'groovy.ui.GroovyMain'
+        args rootProject.file('tests/LoaderResourceCompatibilityCheck.groovy').absolutePath, rootProject.sharedRoot.absolutePath
+    }
+    def compileFareCheck = tasks.register('compileJcm26FareCheck', JavaCompile) {
+        dependsOn tasks.named('classes')
+        source rootProject.file('tests/FareIntegrationCompatibilityCheck.java')
+        classpath = sourceSets.main.output + configurations.compileClasspath
+        destinationDirectory = layout.buildDirectory.dir('classes/fareCompatibility')
+        options.encoding = 'UTF-8'
+        options.release = 25
+    }
+    def checkFareIntegration = tasks.register('checkJcm26FareIntegration', JavaExec) {
+        dependsOn compileFareCheck
+        classpath = files(compileFareCheck.flatMap { it.destinationDirectory }) + sourceSets.main.output + configurations.compileClasspath
+        mainClass = 'com.jsblock.compatibility.FareIntegrationCompatibilityCheck'
+        args file('src/main/resources/jsblock.mixins.json').absolutePath
+    }
+    tasks.named('check') { dependsOn checkResources, checkLoaderSource, checkFareIntegration }
+}

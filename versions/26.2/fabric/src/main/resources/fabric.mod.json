@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "jsblock",
+  "version": "${version}",
+  "name": "Joban Client Mod",
+  "description": "Kotlin migration preview of JCM for Minecraft 26.2 with Kotlin LunaCore; gameplay validation is incomplete.",
+  "authors": ["LX86", "StrikeSNC", "AozoraSky"],
+  "license": "Apache-2.0",
+  "icon": "icon.png",
+  "environment": "*",
+  "entrypoints": {"main": ["com.jsblock.fabric.JobanFabric"], "client": ["com.jsblock.fabric.JobanFabricClient"]},
+  "mixins": ["jsblock.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.3", "fabric-api": "*", "architectury": ">=21.1.10",
+    "mtr": ">=${minimumMtrVersion}", "transit_core": ">=${transitCoreVersion}", "minecraft": "26.2", "java": ">=25"
+  }
+}

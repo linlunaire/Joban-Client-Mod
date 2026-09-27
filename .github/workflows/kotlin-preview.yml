@@ -1,0 +1,66 @@
+name: Kotlin 26.2 preview
+
+on:
+  push:
+    branches: ['codex/kotlin-26.2-preview']
+  pull_request:
+    branches: ['codex/kotlin-26.2-preview']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/codex/kotlin-26.2-preview' || github.base_ref == 'codex/kotlin-26.2-preview'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout JCM add-on
+        uses: actions/checkout@v5
+        with:
+          path: Joban-Client-Mod-1.21.1
+
+      - name: Checkout Kotlin LunaCore prerequisite
+        uses: actions/checkout@v5
+        with:
+          repository: linlunaire/Kotlin-LunaCore
+          ref: 8fe3fa3187ac4ac382806c1038798653bcfda4d2 # Kotlin LunaCore 0.2.0
+          path: Kotlin-LunaCore
+
+      - name: Checkout MTR Kotlin preview
+        uses: actions/checkout@v5
+        with:
+          repository: linlunaire/Minecraft-Transit-Railway
+          ref: f6342b6f97cd90fa164f8adb29e7e2030fca0f1a # MTR 26.2-3.4.0-kotlin.1
+          path: Minecraft-Transit-Railway-3.x.x
+
+      - name: Set up GraalVM JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: graalvm
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrappers executable
+        run: chmod +x Kotlin-LunaCore/gradlew Minecraft-Transit-Railway-3.x.x/gradlew Joban-Client-Mod-1.21.1/versions/26.2/gradlew
+
+      - name: Build Kotlin LunaCore
+        working-directory: Kotlin-LunaCore
+        run: ./gradlew build --stacktrace --console=plain
+
+      - name: Build MTR
+        working-directory: Minecraft-Transit-Railway-3.x.x
+        run: ./gradlew build --stacktrace --console=plain
+
+      - name: Build and verify JCM Fabric and NeoForge
+        working-directory: Joban-Client-Mod-1.21.1/versions/26.2
+        run: ./gradlew build --stacktrace --console=plain
+
+      - name: Upload JCM preview artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: JCM-26.2-kotlin-preview
+          path: Joban-Client-Mod-1.21.1/build/release/JCM-*-26.2-*.jar
+          if-no-files-found: error

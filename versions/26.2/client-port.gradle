@@ -1,0 +1,95 @@
+// Only generated 26.2 sources are adapted; the shared 1.21.1 sources stay intact.
+rootProject.ext.transformJcm26ClientSource = { String source, String path ->
+    if (!(path.startsWith('common/com/jsblock/render/') || path.startsWith('common/com/jsblock/screen/') ||
+          path.startsWith('common/com/jsblock/client/') || path.startsWith('common/com/jsblock/data/') ||
+          path.startsWith('common/com/jsblock/vermappings/render/') ||
+          path == 'common/com/jsblock/vermappings/JobanMapping.java' || path == 'common/com/jsblock/JobanClient.java')) {
+        return source
+    }
+    def result = source.replace('\r\n', '\n')
+        .replaceAll(/(?m)^import com\.mojang\.blaze3d\.vertex\.(?:Tesselator|VertexFormat\.Mode);\n/, '')
+        .replace('import net.minecraft.client.renderer.MultiBufferSource;', 'import mtr.mappings.RenderBufferSource;')
+        .replace('MultiBufferSource.BufferSource', 'RenderBufferSource')
+        .replaceAll(/\bMultiBufferSource\b/, 'RenderBufferSource')
+        .replace('RenderBufferSource.immediate(new com.mojang.blaze3d.vertex.ByteBufferBuilder(256))', 'RenderBufferSource.current().immediate()')
+        .replace('import net.minecraft.client.renderer.LightTexture;', 'import net.minecraft.util.LightCoordsUtil;')
+        .replaceAll(/\bLightTexture\b/, 'LightCoordsUtil')
+        .replace('world.getDayTime()', 'world.getOverworldClockTime()')
+        .replace('shouldRenderOffScreen(T blockEntity)', 'shouldRenderOffScreen()')
+        .replace('import net.minecraft.client.model.EntityModel;', 'import mtr.mappings.EntityModelMapper;')
+        .replaceAll(/\bEntityModel\b/, 'EntityModelMapper')
+        .replaceAll(/withFont\(Identifier\.parse\(([^\n]+?)\)\)/, 'withFont(new net.minecraft.network.chat.FontDescription.Resource(Identifier.parse($1)))')
+        .replace('guiGraphics.drawString(', 'guiGraphics.text(')
+        .replace('guiGraphics.drawCenteredString(', 'guiGraphics.centeredText(')
+        .replace('guiGraphics.pose().pushPose()', 'guiGraphics.pose().pushMatrix()')
+        .replace('guiGraphics.pose().popPose()', 'guiGraphics.pose().popMatrix()')
+        .replace('guiGraphics.pose().translate((float)componentX, (float)startInlineY, 0.0F)', 'guiGraphics.pose().translate((float)componentX, (float)startInlineY)')
+        .replace('guiGraphics.pose().scale(component.scale, component.scale, component.scale)', 'guiGraphics.pose().scale(component.scale, component.scale)')
+
+    if (path.startsWith('common/com/jsblock/screen/')) {
+        result = result.replace('import mtr.screen.WidgetBetterCheckbox;', 'import com.jsblock.screen.WidgetCheckbox26;')
+            .replaceAll(/\bWidgetBetterCheckbox\b/, 'WidgetCheckbox26')
+    }
+    if (path.endsWith('/JobanPIDSConfigScreen.java')) {
+        def sharedControls = '''         IDrawing.setPositionAndWidth(this.selectAllCheckbox, 20, 20, 144);
+         this.selectAllCheckbox.setChecked(this.filterPlatformIds.isEmpty());
+         this.addDrawableChild(this.selectAllCheckbox);
+         IDrawing.setPositionAndWidth(this.filterButton, 20, 60, 72);
+         this.filterButton.setMessage(Text.translatable("selectWorld.edit", new Object[0]));
+         this.addDrawableChild(this.filterButton);
+'''
+        def presetStart = '      IDrawing.setPositionAndWidth(this.presetIDTextField,'
+        if (!result.contains(sharedControls) || !result.contains(presetStart)) {
+            throw new GradleException('JobanPIDSConfigScreen layout changed; review one-time shared widget registration.')
+        }
+        result = result.replace(sharedControls, '').replace(presetStart, sharedControls + '\n' + presetStart)
+    }
+
+    if (path == 'common/com/jsblock/JobanClient.java') {
+        result = result.replaceAll(/RegistryClient\.registerBlockRenderType\(RenderType\.(cutout|translucent)\(\), /) { all, layer ->
+            "mtr.mappings.TerrainRenderLayers.register(net.minecraft.client.renderer.chunk.ChunkSectionLayer.${layer.toUpperCase(java.util.Locale.ROOT)}, "
+        }
+    }
+    if (path.endsWith('/RenderFaresaver1.java') || path.endsWith('/RenderDepartureTimer.java')) {
+        result = result.replaceAll(/textRenderer\.drawInBatch\(formattedText, ([^\n]+?), vertexConsumers, DisplayMode\.NORMAL, 0, 15728880\);/,
+            'vertexConsumers.drawText(formattedText, $1, 0, 15728880);')
+            .replace('formattedText, 0.0F, 0.0F, 15606323,', 'formattedText, 0.0F, 0.0F, 15606323 | 0xFF000000,')
+    }
+    if (path.endsWith('/IDrawingJoban.java')) {
+        // Old Font.drawInBatch supplied opacity for RGB-only colours; 26.2 submitText does not.
+        result = result.replace('int a = textColor >> 24 & 255;',
+            'int a = com.jsblock.vermappings.render.RenderHelper.legacyTextColor(textColor) >>> 24;')
+    }
+    if (path.endsWith('/ConfigScreenBase.java')) {
+        result = result.replace('boolean keyPressed(int keyCode, int scanCode, int modifier) {', '''boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+      final int keyCode = event.key();''')
+            .replace('super.keyPressed(keyCode, scanCode, modifier)', 'super.keyPressed(event)')
+        def legacyHighlight = '''               RenderSystem.enableBlend();
+               RenderSystem.defaultBlendFunc();
+               RenderHelper.disableTexture();
+               RenderHelper.setShaderColor(1.0F, 1.0F, 1.0F, 0.3F);
+               guiGraphics.fill(this.screenRoot.startX, entry.y, this.screenRoot.width, entry.widgetHeight, -1);
+               RenderHelper.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+               RenderHelper.enableTexture();'''
+        if (!result.contains(legacyHighlight)) {
+            throw new GradleException('ConfigScreenBase highlight changed; review the 26.2 GUI extraction conversion.')
+        }
+        result = result.replace(legacyHighlight,
+            '               RenderHelper.fill(guiGraphics, this.screenRoot.startX, entry.y, this.screenRoot.width, entry.widgetHeight, 0x4DFFFFFF);')
+    }
+    if (path.endsWith('/ConfigScreen.java')) {
+        result = result.replace('SystemToast.multiline(this.minecraft, ', 'new SystemToast(')
+            .replace('this.minecraft.getToasts()', 'this.minecraft.gui.toastManager()')
+    }
+    if (path.endsWith('/WidgetSuggestionTextField.java')) {
+        result = result.replace('boolean keyPressed(int i, int j, int k) {', '''boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+      final int i = event.key();''')
+            .replace('super.keyPressed(i, j, k)', 'super.keyPressed(event)')
+            .replace('void renderWidget(GuiGraphicsExtractor', 'void extractWidgetRenderState(GuiGraphicsExtractor')
+            .replace('super.renderWidget(', 'super.extractWidgetRenderState(')
+            .replace('this.setTextColor(16733525)', 'this.setTextColor(0xFFFF5555)')
+            .replace('this.setTextColor(16777215)', 'this.setTextColor(0xFFFFFFFF)')
+            .replace('ChatFormatting.YELLOW.getColor() : -1', '0xFFFFFF55 : -1')
+    }
+    return result
+}

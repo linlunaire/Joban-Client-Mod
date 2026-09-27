@@ -1,0 +1,31 @@
+// Only loader/bootstrap/network shims. Persisted registry identifiers remain owned by Joban.init.
+rootProject.ext.transformJcm26LoaderSource = { String source, String path ->
+    String result = source
+    if (path == 'common/com/jsblock/Joban.java') {
+        result = result.replace('LOGGER.info("[Joban Client] Version 1.2.2");', '''com.jsblock.integration.FareSaverIntegration.register();
+      LOGGER.info("[Joban Client] Version 1.2.2 / Kotlin Minecraft 26.2 preview");''')
+            .replace('[Joban Client 1.21.1]', '[Joban Client 26.2]')
+            .replace('public static final String MIN_MTR_VERSION = "3.3.0";', 'public static final String MIN_MTR_VERSION = "3.4.0";')
+            .replace('return "3.3.0";', '''String version = dev.architectury.platform.Platform.getMod("mtr").getVersion();
+      int separator = version.indexOf('-');
+      return separator < 0 ? version : version.substring(separator + 1);''')
+    }
+    if (path.startsWith('common/com/jsblock/packet/')) {
+        result = result.replace('minecraft.execute(', 'minecraft.schedule(')
+                .replace('minecraft.screen', 'minecraft.gui.screen()')
+    }
+    if (path == 'fabric/com/jsblock/fabric/JobanFabric.java') {
+        result = result.replace('new BlockItem(block.get(), RegistryUtilities.createItemProperties(tab::get))',
+                'new mtr.mappings.TooltipBlockItem(block.get(), mtr.mappings.RegistrationContext.blockItemProperties(id(path), block.get()))')
+        result = result.replace('Registry.register(RegistryUtilities.registryGetItem(), id(path), item.get());', '''Registry.register(RegistryUtilities.registryGetItem(), id(path), item.get());
+        FabricRegistryUtilities.registerCreativeModeTab(ItemGroups.MAIN.get(), item.get());''')
+    }
+    if (path == 'neoforge/com/jsblock/mappings/ForgeUtilities.java') {
+        // Use MTR's already-ported spawn packet bridge, avoiding a second version-sensitive synchronizer.
+        result = result.replaceAll(/(?s)if \(entity\.level\(\) instanceof ServerLevel serverLevel\) \{.*?throw new IllegalArgumentException\("Entity spawn packets can only be created on the server"\);/,
+                'return mtr.neoforge.mappings.ForgeUtilities.createAddEntityPacket(entity);')
+        result = result.replace('RenderLevelStageEvent event)', 'RenderLevelStageEvent.AfterOpaqueBlocks event)')
+                .replace('if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS) {', '{')
+    }
+    return result
+}

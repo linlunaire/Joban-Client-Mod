@@ -1,0 +1,99 @@
+architectury { common('fabric', 'neoforge') }
+// Architectury otherwise injects fabric-loader:+ into this tool-only classpath.
+configurations.matching { it.name == 'architecturyTransformerClasspath' }.configureEach {
+    resolutionStrategy.force "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+}
+dependencies {
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    api "dev.architectury:architectury:${rootProject.architectury_version}"
+}
+
+def checkGroovy = configurations.detachedConfiguration(dependencies.localGroovy())
+def checkOs = org.gradle.internal.os.OperatingSystem.current()
+def nativeOs = checkOs.isWindows() ? 'windows' : checkOs.isMacOsX() ? 'macos' : 'linux'
+def nativeArch = System.getProperty('os.arch').contains('aarch64') ? '-arm64' : ''
+def checkNatives = configurations.detachedConfiguration(dependencies.create("org.lwjgl:lwjgl:3.4.1:natives-${nativeOs}${nativeArch}"))
+
+tasks.register('checkCompatibility') { group = 'verification' }
+tasks.named('check') { dependsOn 'checkCompatibility' }
+def checkTransformerLoader = tasks.register('checkTransformerLoader') {
+    group = 'verification'
+    doLast {
+        def loaders = configurations.getByName('architecturyTransformerClasspath').incoming.resolutionResult.allComponents
+            .collect { it.id }.findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier && it.group == 'net.fabricmc' && it.module == 'fabric-loader' }
+        if (loaders.size() != 1 || loaders[0].version != rootProject.fabric_loader_version) {
+            throw new GradleException("Architectury transformer loader drifted: ${loaders}")
+        }
+        logger.lifecycle("PASS: Architectury transformer uses pinned Fabric Loader ${loaders[0].version}")
+    }
+}
+tasks.named('check') { dependsOn checkTransformerLoader }
+
+// Compile an untouched Java oracle from the shared 1.21.1 model, with only the
+// version identifier rename. Both implementations execute the same scenarios.
+def dataBaselineSources = layout.buildDirectory.dir('generated/data-java-baseline')
+def dataBaselineClasses = layout.buildDirectory.dir('classes/dataJavaBaseline')
+def dataCheckClasses = layout.buildDirectory.dir('classes/dataKotlinCompatibility')
+def prepareDataBaseline = tasks.register('prepareDataJavaBaseline', Sync) {
+    from(new File(rootProject.sharedRoot, 'common/src/main/java/com/jsblock/data')) { include '*.java' }
+    into dataBaselineSources
+    filter { line -> line.replace('ResourceLocation', 'Identifier') }
+}
+tasks.register('compileDataJavaBaseline', JavaCompile) {
+    dependsOn prepareDataBaseline
+    source dataBaselineSources
+    classpath = configurations.compileClasspath
+    destinationDirectory = dataBaselineClasses
+}
+tasks.register('compileDataKotlinCompatibility', JavaCompile) {
+    dependsOn tasks.named('classes')
+    source '../tests/JcmDataCompatibilityCheck.java', '../tests/JcmDataScenario.java'
+    classpath = sourceSets.main.output + configurations.compileClasspath
+    destinationDirectory = dataCheckClasses
+}
+tasks.register('checkDataKotlinCompatibility', JavaExec) {
+    group = 'verification'
+    dependsOn 'compileDataJavaBaseline', 'compileDataKotlinCompatibility'
+    classpath = files(dataCheckClasses) + sourceSets.main.output + configurations.compileClasspath
+    mainClass = 'com.jsblock.compatibility.JcmDataCompatibilityCheck'
+    args dataBaselineClasses.get().asFile.absolutePath,
+        tasks.named('compileKotlin').get().destinationDirectory.get().asFile.absolutePath,
+        dataCheckClasses.get().asFile.absolutePath
+}
+tasks.named('checkCompatibility') { dependsOn 'checkDataKotlinCompatibility' }
+['fabric', 'neoforge'].each { loader ->
+    def packagedCheck = tasks.register("checkPackagedData${loader.capitalize()}", JavaExec) {
+        group = 'verification'
+        dependsOn 'compileDataJavaBaseline', 'compileDataKotlinCompatibility', ":${loader}:shadowJar"
+        classpath = files(dataCheckClasses) + sourceSets.main.output + configurations.compileClasspath
+        mainClass = 'com.jsblock.compatibility.JcmDataCompatibilityCheck'
+        doFirst {
+            setArgs([dataBaselineClasses.get().asFile.absolutePath,
+                project(":${loader}").tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath,
+                dataCheckClasses.get().asFile.absolutePath])
+        }
+    }
+    project(":${loader}").tasks.named('check') { dependsOn packagedCheck }
+}
+[
+    BlockPort: 'com.jsblock.BlockPortCompatibilityCheck',
+    JcmClient: 'com.jsblock.JcmClientCompatibilityCheck'
+].each { name, entryPoint ->
+    def output = layout.buildDirectory.dir("classes/${name}Compatibility")
+    def compileCheck = tasks.register("compile${name}Compatibility", JavaCompile) {
+        dependsOn tasks.named('classes')
+        source "../tests/${entryPoint.tokenize('.').last()}.java"
+        classpath = sourceSets.main.output + configurations.compileClasspath + checkGroovy
+        destinationDirectory = output
+    }
+    def runCheck = tasks.register("check${name}Compatibility", JavaExec) {
+        group = 'verification'
+        dependsOn compileCheck
+        classpath = files(output) + sourceSets.main.output + configurations.compileClasspath + checkGroovy + checkNatives
+        mainClass = entryPoint
+        args rootProject.sharedRoot.absolutePath
+        workingDir = layout.buildDirectory.dir('compatibility-run').get().asFile
+        doFirst { workingDir.mkdirs() }
+    }
+    tasks.named('checkCompatibility') { dependsOn runCheck }
+}

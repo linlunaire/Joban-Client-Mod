@@ -1,0 +1,22 @@
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+configurations {
+    common
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+}
+dependencies {
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    api "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
+    api "dev.architectury:architectury-fabric:${rootProject.architectury_version}"
+    implementation files(new File(rootProject.mtrRoot, "build/release/MTR-fabric-${rootProject.mtrVersion}.jar"))
+    implementation files(rootProject.transitCoreLoaderJar('fabric'))
+    common(project(':common')) { transitive = false }
+    shadowCommon(project(path: ':common', configuration: 'transformProductionFabric')) { transitive = false }
+}
+processResources {
+    from(project(':common').file('src/main/resources')) { include 'jsblock.mixins.json' }
+}

@@ -1,0 +1,163 @@
+plugins {
+    id 'architectury-plugin' version '3.5.169'
+    id 'dev.architectury.loom-no-remap' version '1.17.491' apply false
+    id 'com.gradleup.shadow' version '9.2.2' apply false
+    id 'org.jetbrains.kotlin.jvm' version '2.4.20' apply false
+}
+
+if (JavaVersion.current() != JavaVersion.VERSION_25) throw new GradleException('JCM 26.2 requires JDK 25.')
+if (minecraft_version != '26.2') throw new GradleException('This target builds Minecraft 26.2 only.')
+ext.sharedRoot = file('../..')
+ext.mtrRoot = providers.gradleProperty('mtrProjectDir').map { file(it) }.getOrElse(new File(sharedRoot, '../Minecraft-Transit-Railway-3.x.x'))
+def mtrProperties = new Properties()
+new File(mtrRoot, 'gradle.properties').withInputStream { mtrProperties.load(it) }
+ext.mtrVersion = "26.2-${mtrProperties.getProperty('mod_version')}"
+ext.mtrCommonJar = new File(mtrRoot, "common/build/libs/common-${mtrVersion}-dev.jar")
+def preferredCoreRoot = new File(sharedRoot, '../Kotlin-LunaCore')
+ext.transitCoreRoot = providers.gradleProperty('transitCoreProjectDir').map { file(it) }.getOrElse(preferredCoreRoot.isDirectory() ? preferredCoreRoot : new File(sharedRoot, '../Transit-Core'))
+ext.transitCoreJar = new File(transitCoreRoot, "core/build/libs/transit-core-${transit_core_version}.jar")
+ext.transitCoreLoaderJar = { String loader -> new File(transitCoreRoot, "build/release/Kotlin-LunaCore-${loader}-26.2-${transit_core_version}.jar") }
+apply from: 'source-port.gradle'
+['Block', 'Client', 'Loader'].each { area ->
+    apply from: "${area.toLowerCase()}-port.gradle"
+}
+architectury { minecraft = minecraft_version }
+
+allprojects {
+    apply plugin: 'architectury-plugin'
+    group = 'com.jsblock'
+    version = rootProject.jcm_version
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.architectury.dev/' }
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://neoforged.forgecdn.net/releases/' }
+        maven { url = 'https://maven.neoforged.net/releases/' }
+    }
+}
+
+def verifyMtrArtifacts = tasks.register('verifyMtrArtifacts') {
+    doLast {
+        def artifacts = [rootProject.mtrCommonJar, rootProject.transitCoreJar]
+        artifacts.each { if (!it.isFile()) throw new GradleException("Build MTR and Kotlin LunaCore first: missing ${it}") }
+    }
+}
+
+def releaseCheckClasses = layout.buildDirectory.dir('classes/releaseArtifactCompatibility')
+tasks.register('compileReleaseArtifactCompatibility', JavaCompile) {
+    source 'tests/ReleaseArtifactCompatibilityCheck.java'
+    classpath = files()
+    destinationDirectory = releaseCheckClasses
+    options.encoding = 'UTF-8'
+    options.release = 25
+    sourceCompatibility = '25'
+    targetCompatibility = '25'
+}
+
+subprojects {
+    apply plugin: 'dev.architectury.loom-no-remap'
+    apply plugin: 'com.gradleup.shadow'
+    apply plugin: 'org.jetbrains.kotlin.jvm'
+    java { toolchain.languageVersion = JavaLanguageVersion.of(25) }
+    kotlin {
+        jvmToolchain(25)
+        coreLibrariesVersion = rootProject.kotlin_runtime_version
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
+            jvmDefault = org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY
+            moduleName = "jcm_${project.name}"
+        }
+    }
+    configurations { shadowCommon }
+    dependencies {
+        minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+        compileOnly files(rootProject.mtrCommonJar)
+        compileOnly files(rootProject.transitCoreJar)
+        implementation "org.jetbrains.kotlin:kotlin-stdlib:${rootProject.kotlin_runtime_version}"
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 25
+        options.compilerArgs += ['-Xmaxerrs', '1000']
+    }
+
+    def overlays = file('src/main/java')
+    def kotlinSources = fileTree('src/main/kotlin') { include '**/*.kt' }
+    def generatedJava = layout.buildDirectory.dir('generated/sources/jcm')
+    def prepareSources = tasks.register('prepareSources', Sync) {
+        inputs.files(rootProject.fileTree('.') { include '*-port.gradle' })
+        inputs.files(fileTree(overlays))
+        inputs.files(kotlinSources)
+        inputs.file(new File(rootProject.sharedRoot, 'common/src/main/java/com/jsblock/Joban.java'))
+        from new File(rootProject.sharedRoot, "${project.name}/src/main/java")
+        if (project.name == 'common') exclude 'com/jsblock/mixin/MixinTicketBarrier.java'
+        // Kotlin overrides own the 26.2 type; leave the original 1.21.1 source untouched.
+        exclude { details ->
+            details.relativePath.pathString.endsWith('.java') && file("src/main/kotlin/${details.relativePath.pathString.replaceAll(/\.java$/, '.kt')}").isFile()
+        }
+        into generatedJava
+        doLast {
+            fileTree(destinationDir).matching { include '**/*.java' }.each { javaFile ->
+                def sourcePath = project.name + '/' + destinationDir.toPath().relativize(javaFile.toPath()).toString().replace('\\', '/')
+                def migrated = rootProject.transformJcm26CoreSource(javaFile.getText('UTF-8'), sourcePath)
+                ['Block', 'Client', 'Loader'].each { area -> migrated = rootProject.ext.get("transformJcm26${area}Source").call(migrated, sourcePath) }
+                javaFile.setText(migrated, 'UTF-8')
+            }
+            project.copy { from overlays; into destinationDir }
+        }
+    }
+    sourceSets.main.java.setSrcDirs([generatedJava])
+    tasks.named('compileJava') { dependsOn prepareSources, verifyMtrArtifacts }
+    tasks.named('compileKotlin') { dependsOn prepareSources, verifyMtrArtifacts }
+    if (project.name != 'common') {
+        def verifyLoaderArtifact = tasks.register('verifyMtrLoaderArtifact') {
+            doLast {
+                def artifact = new File(rootProject.mtrRoot, "build/release/MTR-${project.name}-${rootProject.mtrVersion}.jar")
+                if (!artifact.isFile()) throw new GradleException("Build MTR ${project.name} first: missing ${artifact}")
+                def coreArtifact = rootProject.transitCoreLoaderJar(project.name)
+                if (!coreArtifact.isFile()) throw new GradleException("Build Kotlin LunaCore ${project.name} first: missing ${coreArtifact}")
+            }
+        }
+        tasks.named('compileJava') { dependsOn verifyLoaderArtifact }
+        tasks.named('compileKotlin') { dependsOn verifyLoaderArtifact }
+    }
+    processResources {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        inputs.property 'version', project.version
+        inputs.property 'mtrVersion', rootProject.mtrVersion
+        inputs.property 'minimumMtrVersion', rootProject.minimum_mtr_version
+        inputs.property 'transitCoreVersion', rootProject.transit_core_version
+        from(new File(rootProject.sharedRoot, "${project.name}/src/main/resources")) {
+            exclude 'fabric.mod.json', 'META-INF/neoforge.mods.toml', 'pack.mcmeta', 'jsblock.mixins.json'
+            if (project.name == 'common') exclude 'data/**', 'assets/jsblock/items/**'
+        }
+        filesMatching(['fabric.mod.json', 'META-INF/neoforge.mods.toml']) {
+            expand version: project.version, minimumMtrVersion: rootProject.minimum_mtr_version, transitCoreVersion: rootProject.transit_core_version
+        }
+    }
+    shadowJar {
+        configurations = [project.configurations.shadowCommon]
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        archiveBaseName = "JCM-${project.name}"
+        archiveClassifier = ''
+        exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+    }
+    if (project.name != 'common') {
+        def artifactCheck = tasks.register('checkReleaseArtifactCompatibility', JavaExec) {
+            group = 'verification'
+            dependsOn ':compileReleaseArtifactCompatibility', tasks.named('shadowJar')
+            classpath = files(releaseCheckClasses)
+            mainClass = 'com.jsblock.compatibility.ReleaseArtifactCompatibilityCheck'
+            doFirst { args tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath, project.name, project.version.toString() }
+        }
+        tasks.named('check') { dependsOn artifactCheck }
+        def releaseJar = tasks.register('releaseJar', Copy) {
+            dependsOn tasks.named('shadowJar'), tasks.named('check'), ':common:check'
+            from tasks.named('shadowJar').flatMap { it.archiveFile }
+            into new File(rootProject.sharedRoot, 'build/release')
+        }
+        tasks.named('build') { dependsOn releaseJar }
+    }
+}
+
+apply from: 'resource-port.gradle'
