@@ -28,12 +28,12 @@ under ignored `build/` directories; never edit those in place.
 
 Successful builds put these files in the root `build/release/`:
 
-- `JCM-fabric-1.2.2-26.2-kotlin.2.jar`
-- `JCM-neoforge-1.2.2-26.2-kotlin.2.jar`
+- `JCM-fabric-1.2.2-26.2-kotlin.3.jar`
+- `JCM-neoforge-1.2.2-26.2-kotlin.3.jar`
 
 Install only the matching loader JAR, with the freshly rebuilt MTR 26.2 and
 Architectury >=21.1.10 and <22, plus Kotlin LunaCore 0.2.1; Fabric also needs Fabric API.
-This preview requires MTR `26.2-3.4.0-kotlin.2` or newer, including its fare-adjustment API.
+This preview requires MTR `26.2-3.4.0-kotlin.3` or newer, including its fare-adjustment API.
 Kotlin LunaCore supplies the shared Kotlin runtime. JCM does not bundle Kotlin or
 require Fabric Language Kotlin / Kotlin for Forge. The compile targets
 are Fabric Loader 0.19.3 / Fabric API 0.159.0+26.2 and NeoForge 26.2.0.88. Do not
@@ -72,6 +72,10 @@ combine both JCM loader JARs or install JCM for 1.21.1 in the 26.2 instance.
   Minecraft, test or diagnostic classes. Publication depends on successful checks.
 
 ## Kotlin boundary and verification
+
+Preview 3 rebuilds against MTR's Kotlin lift runtime and optional-map startup
+fix. It does not add JCM conversions; the data, fare integration and final-loader
+checks still verify the selected MTR/Kotlin LunaCore dependency pair.
 
 The complete six-type `com.jsblock.data` package is Kotlin in this target:
 `ScreenAlignment`, `ScreenRoot`, `InlineComponentEntry`, `ConfigGuiEntry`,
