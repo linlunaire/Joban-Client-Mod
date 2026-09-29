@@ -12,6 +12,8 @@ ext.mtrRoot = providers.gradleProperty('mtrProjectDir').map { file(it) }.getOrEl
 def mtrProperties = new Properties()
 new File(mtrRoot, 'gradle.properties').withInputStream { mtrProperties.load(it) }
 ext.mtrVersion = "26.2-${mtrProperties.getProperty('mod_version')}"
+// Keep builds compatible with both YLM and pinned pre-rename MTR checkouts.
+ext.mtrArchiveBaseName = mtrProperties.getProperty('archives_base_name', 'MTR')
 ext.mtrCommonJar = new File(mtrRoot, "common/build/libs/common-${mtrVersion}-dev.jar")
 def preferredCoreRoot = new File(sharedRoot, '../Kotlin-LunaCore')
 ext.transitCoreRoot = providers.gradleProperty('transitCoreProjectDir').map { file(it) }.getOrElse(preferredCoreRoot.isDirectory() ? preferredCoreRoot : new File(sharedRoot, '../Transit-Core'))
@@ -112,7 +114,7 @@ subprojects {
     if (project.name != 'common') {
         def verifyLoaderArtifact = tasks.register('verifyMtrLoaderArtifact') {
             doLast {
-                def artifact = new File(rootProject.mtrRoot, "build/release/MTR-${project.name}-${rootProject.mtrVersion}.jar")
+                def artifact = new File(rootProject.mtrRoot, "build/release/${rootProject.mtrArchiveBaseName}-${project.name}-${rootProject.mtrVersion}.jar")
                 if (!artifact.isFile()) throw new GradleException("Build MTR ${project.name} first: missing ${artifact}")
                 def coreArtifact = rootProject.transitCoreLoaderJar(project.name)
                 if (!coreArtifact.isFile()) throw new GradleException("Build Kotlin LunaCore ${project.name} first: missing ${coreArtifact}")

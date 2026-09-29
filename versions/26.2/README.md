@@ -1,7 +1,7 @@
 # JCM 26.2 — Kotlin migration preview
 
-JCM is an **MTR add-on**, as is ANTE: neither replaces MTR. Kotlin LunaCore
-supplies shared runtime/foundation services; MTR owns railway simulation and
+JCM is a **Yanling Metro (YLM) add-on**, as is YLM-ANTE: neither replaces YLM. Kotlin LunaCore
+supplies shared runtime/foundation services; YLM owns railway simulation and
 fare rules; JCM adds its blocks, PIDS and fare-saver integration.
 
 This target preserves the original `jsblock` namespace and registration names.
@@ -13,7 +13,7 @@ project into a repository.
 ## Build and install
 
 Build the sibling [Kotlin LunaCore](https://github.com/linlunaire/Kotlin-LunaCore)
-0.2.1 and MTR 26.2 Kotlin targets first, then from the JCM root:
+0.2.1 and YLM 26.2 Kotlin targets first, then from the JCM root:
 
 ```powershell
 ./gradlew.bat build -Version=26.2 -JavaHome '<JDK 25 directory>'
@@ -28,12 +28,14 @@ under ignored `build/` directories; never edit those in place.
 
 Successful builds put these files in the root `build/release/`:
 
-- `JCM-fabric-1.2.2-26.2-kotlin.3.jar`
-- `JCM-neoforge-1.2.2-26.2-kotlin.3.jar`
+- `JCM-fabric-1.2.2-26.2-kotlin.4.jar`
+- `JCM-neoforge-1.2.2-26.2-kotlin.4.jar`
 
-Install only the matching loader JAR, with the freshly rebuilt MTR 26.2 and
+Install only the matching loader JAR, with the freshly rebuilt YLM 26.2 and
 Architectury >=21.1.10 and <22, plus Kotlin LunaCore 0.2.1; Fabric also needs Fabric API.
-This preview requires MTR `26.2-3.4.0-kotlin.3` or newer, including its fare-adjustment API.
+This preview requires YLM `26.2-3.4.0-kotlin.4` or newer, including its fare-adjustment API and train audio restart fix.
+YLM keeps the `mtr` mod ID; JCM reads its artifact prefix from the sibling build and
+also accepts pinned pre-rename MTR checkouts. Do not install YLM and MTR together.
 Kotlin LunaCore supplies the shared Kotlin runtime. JCM does not bundle Kotlin or
 require Fabric Language Kotlin / Kotlin for Forge. The compile targets
 are Fabric Loader 0.19.3 / Fabric API 0.159.0+26.2 and NeoForge 26.2.0.88. Do not
